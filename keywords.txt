@@ -1,0 +1,59 @@
+# TimerStepper 라이브러리 키워드 정의
+# 키워드 형식: 키워드명	KEYWORD1	KEYWORD2	KEYWORD3
+
+# 클래스명
+TimerStepper	KEYWORD1
+
+# 생성자
+TimerStepper	KEYWORD2
+
+# 모터 제어 함수
+setSpeed	KEYWORD2
+setDirection	KEYWORD2
+runSpeed	KEYWORD2
+stop	KEYWORD2
+pause	KEYWORD2
+resume	KEYWORD2
+
+# 상태 확인 함수
+isRunning	KEYWORD2
+getCurrentSpeed	KEYWORD2
+getDirection	KEYWORD2
+getStepCount	KEYWORD2
+resetStepCount	KEYWORD2
+
+# 설정 함수
+setMinPulseWidth	KEYWORD2
+setMaxSpeed	KEYWORD2
+
+# 가속/감속 제어 함수 (AccelStepper 호환)
+setAcceleration	KEYWORD2
+setCurrentPosition	KEYWORD2
+moveTo	KEYWORD2
+move	KEYWORD2
+run	KEYWORD2
+runToPosition	KEYWORD2
+runToNewPosition	KEYWORD2
+
+# 위치 및 상태 확인 함수
+currentPosition	KEYWORD2
+targetPosition	KEYWORD2
+speed	KEYWORD2
+maxSpeed	KEYWORD2
+acceleration	KEYWORD2
+distanceToGo	KEYWORD2
+isAccelerating	KEYWORD2
+isDecelerating	KEYWORD2
+
+# 타이머 모드 상수
+TIMER_MODE_SPEED	LITERAL1
+TIMER_MODE_POSITION	LITERAL1
+
+# 기존 상수
+DIRECTION_CW	LITERAL1
+DIRECTION_CCW	LITERAL1
+
+
+
+
+
