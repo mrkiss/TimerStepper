@@ -73,42 +73,42 @@ private:
     uint8_t _stepPin;
     uint8_t _dirPin;
     
-    // 모터 상태
-    bool _isRunning;
-    bool _direction;          // true: 시계방향, false: 반시계방향
-    float _currentSpeed;      // 현재 속도 (스텝/초)
-    float _maxSpeed;          // 최대 속도 (스텝/초)
+    // 모터 상태 (인터럽트에서 접근하므로 volatile)
+    volatile bool _isRunning;
+    volatile bool _direction;          // true: 시계방향, false: 반시계방향
+    volatile float _currentSpeed;      // 현재 속도 (스텝/초)
+    volatile float _maxSpeed;          // 최대 속도 (스텝/초)
     
-    // 가속/감속 관련
-    float _acceleration;      // 가속도 (스텝/초²)
-    float _speed;             // 현재 속도 (스텝/초)
-    long _currentPos;         // 현재 위치
-    long _targetPos;          // 목표 위치
-    float _stepInterval;      // 현재 스텝 간격 (마이크로초)
-    unsigned long _lastStepTime;  // 마지막 스텝 시간
-    float _minStepInterval;   // 최소 스텝 간격 (최대 속도)
-    bool _isAccelerating;     // 가속 중인지
-    bool _isDecelerating;     // 감속 중인지
-    bool _wasAccelerating;    // 이전 스텝에서 가속 중이었는지 (구간 전환 감지)
-    bool _wasConstantSpeed;   // 이전 스텝에서 정속 중이었는지 (구간 전환 감지)
+    // 가속/감속 관련 (인터럽트에서 접근하므로 volatile)
+    volatile float _acceleration;      // 가속도 (스텝/초²)
+    volatile float _speed;             // 현재 속도 (스텝/초)
+    volatile long _currentPos;         // 현재 위치
+    volatile long _targetPos;          // 목표 위치
+    volatile float _stepInterval;      // 현재 스텝 간격 (마이크로초)
+    volatile unsigned long _lastStepTime;  // 마지막 스텝 시간
+    volatile float _minStepInterval;   // 최소 스텝 간격 (최대 속도)
+    volatile bool _isAccelerating;     // 가속 중인지
+    volatile bool _isDecelerating;     // 감속 중인지
+    volatile bool _wasAccelerating;    // 이전 스텝에서 가속 중이었는지 (구간 전환 감지)
+    volatile bool _wasConstantSpeed;   // 이전 스텝에서 정속 중이었는지 (구간 전환 감지)
     
-    // 타이머 모드 관련
+    // 타이머 모드 관련 (인터럽트에서 접근하므로 volatile)
     enum TimerMode {
         TIMER_MODE_SPEED,     // 정속 회전 모드
         TIMER_MODE_POSITION   // 위치 기반 제어 모드
     };
-    TimerMode _timerMode;     // 현재 타이머 모드
-    bool _positionModeActive; // 위치 모드 활성화 여부
+    volatile TimerMode _timerMode;     // 현재 타이머 모드
+    volatile bool _positionModeActive; // 위치 모드 활성화 여부
     
-    // 논블로킹 펄스 생성용 변수들
-    bool _pulseState;         // 펄스 상태 (HIGH/LOW)
-    unsigned long _pulseStartTime;  // 펄스 시작 시간
+    // 논블로킹 펄스 생성용 변수들 (인터럽트에서 접근하므로 volatile)
+    volatile bool _pulseState;         // 펄스 상태 (HIGH/LOW)
+    volatile unsigned long _pulseStartTime;  // 펄스 시작 시간
     
     // 타이밍 관련
-    unsigned int _minPulseWidth;      // 최소 펄스 폭 (마이크로초)
+    volatile unsigned int _minPulseWidth;      // 최소 펄스 폭 (마이크로초)
     
-    // 카운터
-    unsigned long _stepCount;         // 총 스텝 수
+    // 카운터 (인터럽트에서 접근하므로 volatile)
+    volatile unsigned long _stepCount;         // 총 스텝 수
     
     // 타이머 관련
     void setupTimer();
@@ -153,17 +153,16 @@ private:
         void doStep();
     #endif
     
-    // 궤적 계산용 변수들 (moveTo에서 미리 계산)
-    long _startPos;             // 이동 시작 위치
-    long _target1;              // 가속 구간 끝점 (정속 구간 시작)
-    long _target2;              // 감속 구간 시작점 (정속 구간 끝)
-    float _pulseIntervalIncrement;    // 펄스 인터벌 증가치 (스케일 없음)
-    float _fractionalAccumulator;    // 소수점 누적 변수
-    unsigned long _constantSpeedIntervalCount;  // 정속 구간에서 건너뛸 인터럽트 수
-    unsigned long _intervalCounter;    // 현재 인터벌 카운트
-    unsigned long _lastPulseInterval;  // 마지막 펄스 인터벌 (스케일 안됨)
-    long _scaledPulseInterval;         // 스케일된 펄스 인터벌 (10000배, 정밀도 유지)
-    unsigned long _initialInterval;    // 가속 시작/감속 종료 간격 (스케일 안됨)
+    // 궤적 계산용 변수들 (인터럽트에서 접근하므로 volatile)
+    volatile long _startPos;             // 이동 시작 위치
+    volatile long _target1;              // 가속 구간 끝점 (정속 구간 시작)
+    volatile long _target2;              // 감속 구간 시작점 (정속 구간 끝)
+    volatile long _decelSteps;           // 감속 구간 스텝 수
+    volatile unsigned long _constantSpeedIntervalCount;  // 정속 구간에서 건너뛸 인터럽트 수
+    volatile unsigned long _intervalCounter;    // 현재 인터벌 카운트
+    volatile unsigned long _lastPulseInterval;  // 마지막 펄스 인터벌 (스케일 안됨)
+    volatile unsigned long _initialInterval;    // 가속 시작/감속 종료 간격 (스케일 안됨)
+    volatile unsigned long _stepCounter;       // 현재 스텝 카운터 (가속/감속 계산용)
     
     // 플랫폼별 타이머 변수
     #if defined(ESP32)
@@ -177,8 +176,3 @@ private:
 };
 
 #endif
-
-
-
-
-

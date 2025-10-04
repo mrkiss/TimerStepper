@@ -48,13 +48,12 @@ TimerStepper::TimerStepper(uint8_t stepPin, uint8_t dirPin) {
     _startPos = 0;
     _target1 = 0;
     _target2 = 0;
-    _pulseIntervalIncrement = 0.0;
-    _fractionalAccumulator = 0.0;
+    _decelSteps = 0;
     _constantSpeedIntervalCount = 1;
     _intervalCounter = 0;
     _lastPulseInterval = 0;
-    _scaledPulseInterval = 0;
     _initialInterval = 0;
+    _stepCounter = 0;
     
     // 논블로킹 펄스 생성용 변수 초기화
     _pulseState = false;
@@ -161,8 +160,8 @@ void TimerStepper::stop() {
     _pulseState = false;
     _pulseStartTime = 0;
     
-    // 스케일된 간격 리셋 (다음 moveTo를 위해)
-    _scaledPulseInterval = 0;
+
+   
     _lastPulseInterval = 0;
 }
 
@@ -321,35 +320,43 @@ void IRAM_ATTR TimerStepper::doSpeedStep() {
 #else
 void TimerStepper::doSpeedStep() {
 #endif
-    unsigned long currentTime = micros();
-    
     if (!_pulseState) {
         // 펄스 시작
         #if defined(ESP32)
             gpio_set_level((gpio_num_t)_stepPin, 1);
         #else
-    digitalWrite(_stepPin, HIGH);
+            digitalWrite(_stepPin, HIGH);
         #endif
         _pulseState = true;
-        _pulseStartTime = currentTime;
-    } else if (currentTime - _pulseStartTime >= _minPulseWidth) {
-        // 펄스 종료
-        #if defined(ESP32)
-            gpio_set_level((gpio_num_t)_stepPin, 0);
-        #else
-    digitalWrite(_stepPin, LOW);
-        #endif
-        _pulseState = false;
-    
-    // 스텝 카운트 업데이트
-    if (_direction) {
-        _stepCount++;
+        _pulseStartTime = 0;  // 타이머 기반으로 변경
     } else {
-        _stepCount--;
+        // 펄스 종료 조건: 타이머 틱 기반으로 변경
+        // _minPulseWidth를 타이머 틱으로 변환 (100마이크로초 기준)
+        unsigned long minPulseTicks = _minPulseWidth / 100;
+        if (minPulseTicks < 1) minPulseTicks = 1;
+        
+        if (_intervalCounter >= minPulseTicks) {
+            // 펄스 종료
+            #if defined(ESP32)
+                gpio_set_level((gpio_num_t)_stepPin, 0);
+            #else
+                digitalWrite(_stepPin, LOW);
+            #endif
+            _pulseState = false;
+            
+            // 스텝 카운트 업데이트
+            if (_direction) {
+                _stepCount++;
+            } else {
+                _stepCount--;
+            }
+            
+            _intervalCounter = 0;  // 다음 펄스를 위해 리셋
+        }
     }
     
-        _lastStepTime = currentTime;
-    }
+    // 인터벌 카운터 증가 (타이머 기반)
+    _intervalCounter++;
 }
 
 // 위치 기반 제어 모드용 스텝 실행 (가속/감속 기반)
@@ -378,7 +385,7 @@ void TimerStepper::doPositionStep() {
                 digitalWrite(_stepPin, HIGH);
             #endif
             _pulseState = true;
-            _pulseStartTime = 0;  // 타이머 기반
+            _pulseStartTime = 0;  // 타이머 기반으로 변경
             _intervalCounter = 0;
             
             // 펄스 생성 직후에만 다음 간격 계산
@@ -412,47 +419,22 @@ void TimerStepper::doPositionStep() {
             if (_currentPos == _targetPos) {
                 stop();
                 _positionModeActive = false;
+
             }
+            
         }
     }
 }
 
 
-// 펄스 생성 함수 (인터럽트용)
+// 펄스 생성 함수 (인터럽트용) - 타이머 기반으로 단순화
 #if defined(ESP32)
 void IRAM_ATTR TimerStepper::generateStepPulse() {
 #else
 void TimerStepper::generateStepPulse() {
 #endif
-    unsigned long currentTime = micros();
-    
-    if (!_pulseState) {
-        // 펄스 시작
-        #if defined(ESP32)
-            gpio_set_level((gpio_num_t)_stepPin, 1);
-        #else
-            digitalWrite(_stepPin, HIGH);
-        #endif
-        _pulseState = true;
-        _pulseStartTime = currentTime;
-    } else if (currentTime - _pulseStartTime >= _minPulseWidth) {
-        // 펄스 종료
-        #if defined(ESP32)
-            gpio_set_level((gpio_num_t)_stepPin, 0);
-        #else
-            digitalWrite(_stepPin, LOW);
-        #endif
-        _pulseState = false;
-        
-        // 위치 업데이트
-        if (_direction) {
-            _currentPos++;
-        } else {
-            _currentPos--;
-        }
-        
-        _lastStepTime = currentTime;
-    }
+    // 타이머 기반으로 단순화된 펄스 생성
+    // 이 함수는 현재 사용되지 않음 (doSpeedStep, doPositionStep에서 처리)
 }
 
 
@@ -486,7 +468,15 @@ void TimerStepper::setCurrentPosition(long position) {
 
 void TimerStepper::moveTo(long absolute) {
     if (_targetPos != absolute) {
- 
+        // 가속도와 최대속도가 설정되었는지 확인
+        if (_acceleration <= 0.0) {
+            Serial.println("경고: 가속도가 설정되지 않았습니다. setAcceleration()을 먼저 호출하세요.");
+            return;
+        }
+        if (_maxSpeed <= 0.0) {
+            Serial.println("경고: 최대속도가 설정되지 않았습니다. setMaxSpeed()을 먼저 호출하세요.");
+            return;
+        }
         
         // 위치 모드로 전환
         switchToPositionMode();
@@ -507,10 +497,9 @@ void TimerStepper::moveTo(long absolute) {
         _pulseStartTime = 0;
         _wasAccelerating = false;
         _wasConstantSpeed = false;
-        _fractionalAccumulator = 0.0;  // 소수점 누적 변수 초기화
+        _stepCounter = 0;  // 스텝 카운터 초기화
         
         // 궤적 미리 계산 (가속/정속/감속 구간과 타겟 포인트들)
-        // 주의: _scaledPulseInterval은 calculateTrajectory()에서 초기화됨
         calculateTrajectory();
         
         // 위치 제어용 타이머 간격 설정 (100마이크로초)
@@ -559,18 +548,10 @@ float TimerStepper::acceleration() {
 }
 
 long TimerStepper::distanceToGo() {
-    // 인터럽트 안전을 위해 인터럽트 비활성화
-    #if defined(ESP32)
-        portENTER_CRITICAL_ISR(&_timerMux);
-        long result = _targetPos - _currentPos;
-        portEXIT_CRITICAL_ISR(&_timerMux);
-        return result;
-    #else
-        noInterrupts();
-        long result = _targetPos - _currentPos;
-        interrupts();
-        return result;
-    #endif
+    // 인터럽트 안전을 위해 변수 복사
+    long targetPos = _targetPos;
+    long currentPos = _currentPos;
+    return targetPos - currentPos;
 }
 
 bool TimerStepper::isAccelerating() {
@@ -643,53 +624,44 @@ void TimerStepper::calculateTrajectory() {
     
     // 가속/감속 구간 스텝 수 계산
     long accelSteps = abs(_target1 - _currentPos);
-    long decelSteps = abs(_targetPos - _target2);
+    _decelSteps = abs(_targetPos - _target2);
     
     if (accelSteps > 0) {
         // 초기 펄스간격 (가속 시작점)
         // 가속 구간에서의 최종 속도 계산
         float finalSpeedInAccel = sqrt(2.0 * _acceleration * accelSteps);
         
-        // 초기 속도 설정 (적절한 시작 속도)
-        float initialSpeed = 10.0;  // 10 스텝/초 (적절한 시작 속도)
-        
-        // 최소 초기 속도 보장 (너무 느린 시작 방지)
-        float minInitialSpeed = 5.0;  // 5 스텝/초
-        if (initialSpeed < minInitialSpeed) initialSpeed = minInitialSpeed;
-        
-        float initialInterval = 1000000.0 / initialSpeed / 100.0;  // 100마이크로초 타이머 기준
+       
+        // 표준 공식 사용
+        float initialInterval = sqrt(2.0  / _acceleration) * 10000.0;  
+         
         
         // 초기 펄스 인터벌 설정
         _lastPulseInterval = (unsigned long)initialInterval;
         if (_lastPulseInterval < 1) _lastPulseInterval = 1;
         // 최대 제한: 정속 간격의 10배 이내
-        if (_lastPulseInterval > _constantSpeedIntervalCount * 10) {
-            _lastPulseInterval = _constantSpeedIntervalCount * 10;
-        }
+        // if (_lastPulseInterval > _constantSpeedIntervalCount * 10) {
+        //     _lastPulseInterval = _constantSpeedIntervalCount * 10;
+        // }
         
         // 초기 간격 저장 (감속 최대 제한용)
         _initialInterval = _lastPulseInterval;
         
-        // 펄스 간격 증가치 계산 (스케일링 없이 직접 계산)
-        // 가속: 초기 간격 → 정속 간격 (간격 감소)
-        // 대칭이므로 가속/감속 같은 증가치 사용
-        float totalChange = (float)_lastPulseInterval - (float)_constantSpeedIntervalCount;
-        _pulseIntervalIncrement = totalChange / (float)accelSteps;
+        // 스텝 카운터 초기화 (가속/감속 계산용)
+        _stepCounter = 1;
         
         // 디버그 출력
-        Serial.print("선형 가속/감속: 가속스텝="); Serial.print(accelSteps);
-        Serial.print(", 감속스텝="); Serial.print(decelSteps);
-        Serial.print(", 초기속도="); Serial.print(initialSpeed, 1);
+        Serial.print("가속/감속: 가속스텝="); Serial.print(accelSteps);
+        Serial.print(", 감속스텝="); Serial.print(_decelSteps);
         Serial.print(", 최종속도="); Serial.print(finalSpeedInAccel, 1);
         Serial.print(", 초기간격="); Serial.print(_lastPulseInterval);
         Serial.print(", 최고속도간격="); Serial.print(_constantSpeedIntervalCount);
-        Serial.print(", 증가치="); Serial.print(_pulseIntervalIncrement, 3);
         Serial.print(", target1="); Serial.print(_target1);
         Serial.print(", target2="); Serial.println(_target2);
     } else {
         // 가속구간이 없는 경우
-        _pulseIntervalIncrement = 0;
         _lastPulseInterval = _constantSpeedIntervalCount;
+        _stepCounter = 0;
     }
     
     // 인터벌 카운터 초기화
@@ -725,25 +697,24 @@ void TimerStepper::calculateNextInterval() {
         isDecelerating = _currentPos <= _target2;
     }
     
-    // 구간에 따른 펄스 간격 계산 (소수점 누적 방식 사용)
+    // 구간에 따른 펄스 간격 계산 (산업계 표준 공식 사용)
     if (isAccelerating) {
-        // 가속: 간격 감소 (속도 증가)
-        // 소수점 누적 방식으로 정확한 간격 계산
-        _fractionalAccumulator += _pulseIntervalIncrement;
-        int intervalChange = (int)_fractionalAccumulator;  // 정수 부분 추출
-        _fractionalAccumulator -= (float)intervalChange;  // 정수 부분을 누적치에서 제거
-        
-        _lastPulseInterval = _lastPulseInterval - intervalChange;
-        if (_lastPulseInterval < 1) _lastPulseInterval = 1;
+        // 가속: _pulseInterval[i] = _pulseInterval[i-1] - (2*_PulseInterval[i-1]/(4i+1))
+        _stepCounter++;
+        //float change = (2.0 * _lastPulseInterval) / (4.0 * (_stepCounter+1) + 1.0);
+        // _lastPulseInterval = _lastPulseInterval - (unsigned long)change;
+        float tempInterval = (sqrt((2.0 * _stepCounter)/_acceleration) 
+                             - sqrt((2.0 *(_stepCounter-1))/_acceleration))*10000.0;
+        _lastPulseInterval = (unsigned long)tempInterval;
+
         // 최소값 제한: 정속 간격보다 작아지지 않도록
         if (_lastPulseInterval < _constantSpeedIntervalCount) {
             _lastPulseInterval = _constantSpeedIntervalCount;
-            _fractionalAccumulator = 0.0;  // 정속 구간 진입 시 누적치 리셋
         }
     } else if (isConstantSpeed) {
         // 정속: 일정한 간격 유지
         _lastPulseInterval = _constantSpeedIntervalCount;
-        _fractionalAccumulator = 0.0;  // 정속 구간에서는 누적치 리셋
+        _stepCounter = 0;  // 정속 구간에서는 스텝 카운터 리셋
     } else if (isDecelerating) {
         // 감속 구간 진입 감지: 이전 구간이 가속 또는 정속이었다면 처음 진입
         bool justEnteredDecel = (_wasAccelerating || _wasConstantSpeed);
@@ -751,28 +722,38 @@ void TimerStepper::calculateNextInterval() {
         if (justEnteredDecel) {
             // 감속 구간 진입 시: _lastPulseInterval을 정속 간격으로 초기화
             _lastPulseInterval = _constantSpeedIntervalCount;
-            _fractionalAccumulator = 0.0;  // 감속 구간 진입 시 누적치 리셋
+            _stepCounter = _decelSteps;  // 감속 구간 진입 시 스텝 카운터 리셋
         } else {
-            // 감속: 간격 증가 (속도 감소)
-            // 소수점 누적 방식으로 정확한 간격 계산
-            _fractionalAccumulator += _pulseIntervalIncrement;
-            int intervalChange = (int)_fractionalAccumulator;  // 정수 부분 추출
-            _fractionalAccumulator -= (float)intervalChange;  // 정수 부분을 누적치에서 제거
+            // 감속: _pulseInterval[i] = _pulseInterval[i-1] + (2*_PulseInterval[i-1]/(4i+1))
             
-            _lastPulseInterval = _lastPulseInterval + intervalChange;
-            if (_lastPulseInterval < 1) _lastPulseInterval = 1;
-            // 최대 제한: 초기 간격까지 (대칭)
-            if (_lastPulseInterval > _initialInterval) _lastPulseInterval = _initialInterval;
+            
+            // 안전장치: _stepCounter가 0 이하가 되면 감속 완료
+            if (_stepCounter <= 0) {
+                _stepCounter = 0;
+                _lastPulseInterval = _initialInterval;  // 초기 간격으로 설정하여 완전 정지
+            } else {
+                // float change = (2.0 * _lastPulseInterval) / (4.0 * (_stepCounter+1) + 1.0);
+                // _lastPulseInterval = _lastPulseInterval + (unsigned long)change
+               
+                    float tempInterval = (sqrt((2.0 * _stepCounter)/_acceleration) 
+                                         - sqrt((2.0 * (_stepCounter-1))/_acceleration))*10000.0;
+                    _lastPulseInterval = (unsigned long)tempInterval;
+             
+              
+            }
+            _stepCounter--;
         }
     } else {
-        _lastPulseInterval = 5;
+        // 안전장치: 예상치 못한 구간
+        _lastPulseInterval = 100;  // 안전한 값
     }
+    
+    // 최종 안전장치: 간격 값 검증
+    if (_lastPulseInterval < 1) _lastPulseInterval = 1;
+  // 최대 제한: 초기 간격까지 (대칭)
+  if (_lastPulseInterval > _initialInterval) _lastPulseInterval = _initialInterval;
     
     // 구간 전환 상태 업데이트 (다음 사이클에서 구간 전환 감지용)
     _wasAccelerating = isAccelerating;
     _wasConstantSpeed = isConstantSpeed;
 }
-
-
-
-
