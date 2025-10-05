@@ -1,11 +1,11 @@
 /*
-  TimerStepper.h - 타이머 기반 스테퍼 모터 제어 라이브러리
+  TimerStepper.h - 타이머 기반 스테퍼 모터 제어 라이브러리 (수정 버전)
   
   타이머를 사용하여 정확한 펄스 타이밍으로 스테퍼 모터를 제어합니다.
   스텝핀과 방향핀 두 개로 모터를 구동하며, 실시간 속도 조절이 가능합니다.
   
-  작성자: AI Assistant
-  버전: 1.0.0
+  작성자: AI Assistant (수정: Grok)
+  버전: 1.1.0 (동적 타이머 지원)
   라이선스: MIT
 */
 
@@ -13,6 +13,26 @@
 #define TimerStepper_h
 
 #include <Arduino.h>
+
+// 인터럽트 디버그용 구조체
+struct ISRDebugInfo {
+    volatile unsigned long isrCallCount;
+    volatile unsigned long timerUpdateTime;
+    volatile unsigned long lastPulseHighTime;
+    volatile unsigned long lastPulseLowTime;
+    volatile bool currentPulseState;
+    volatile unsigned long currentInterval;
+    volatile long currentPosition;
+    volatile long targetPosition;
+    volatile bool isAccelerating;
+    volatile bool isConstantSpeed;
+    volatile bool isDecelerating;
+    volatile unsigned long stepCounter;
+    volatile unsigned long lastPulseInterval;
+    volatile char lastAction[20];  // 마지막 수행한 작업
+};
+
+extern ISRDebugInfo isrDebug;
 
 // 플랫폼별 타이머 설정
 #if defined(ESP32)
@@ -40,9 +60,7 @@ public:
     void setAcceleration(float acceleration);  // 가속도 설정 (스텝/초²)
     void setCurrentPosition(long position);    // 현재 위치 설정
     void moveTo(long absolute);                // 절대 위치로 이동 (타이머 기반)
-    void moveTo(long absolute, float maxSpeed, float acceleration);  // 가속도/최대속도와 함께 이동
     void move(long relative);                  // 상대 위치로 이동 (타이머 기반)
-    void move(long relative, float maxSpeed, float acceleration);    // 가속도/최대속도와 함께 상대 이동
     bool run();                                // 모터 상태 확인 (타이머 기반에서는 단순 상태 확인)
     void runToPosition();                      // 목표 위치까지 대기 (블로킹)
     // 타이머 기반 모드에서는 moveTo() 호출 즉시 인터럽트에서 모든 계산 처리
@@ -53,7 +71,7 @@ public:
     bool getDirection();                  // 현재 방향 반환
     unsigned long getStepCount();         // 스텝 카운트 반환
     void resetStepCount();                // 스텝 카운트 리셋
-    
+   
     // 위치 및 가속 관련 상태 확인
     long currentPosition();               // 현재 위치 반환
     long targetPosition();                // 목표 위치 반환
@@ -67,6 +85,13 @@ public:
     // 타이머 설정 함수들
     void setMinPulseWidth(unsigned int microseconds);  // 최소 펄스 폭 설정
     void setMaxSpeed(float maxStepsPerSecond);         // 위치 제어용 최대 속도 제한
+    
+    // 디버그 함수들
+    void debugISRStatus();           // ISR 상태 출력
+    void debugSimple();              // 간단한 디버그 출력
+    void debugDetailed();            // 상세한 디버그 출력
+    void resetISRDebugCount();       // ISR 카운터 리셋
+    void debugTimerStatus();         // 타이머 상태 확인
     
 private:
     // 핀 설정
@@ -84,9 +109,9 @@ private:
     volatile float _speed;             // 현재 속도 (스텝/초)
     volatile long _currentPos;         // 현재 위치
     volatile long _targetPos;          // 목표 위치
-    volatile float _stepInterval;      // 현재 스텝 간격 (마이크로초)
+    volatile unsigned long _stepInterval;  // 수정: float → unsigned long (μs 단위 직접 매핑)
     volatile unsigned long _lastStepTime;  // 마지막 스텝 시간
-    volatile float _minStepInterval;   // 최소 스텝 간격 (최대 속도)
+    volatile unsigned long _minStepInterval;  // 수정: float → unsigned long (최대 속도 기반 μs)
     volatile bool _isAccelerating;     // 가속 중인지
     volatile bool _isDecelerating;     // 감속 중인지
     volatile bool _wasAccelerating;    // 이전 스텝에서 가속 중이었는지 (구간 전환 감지)
@@ -109,11 +134,13 @@ private:
     
     // 카운터 (인터럽트에서 접근하므로 volatile)
     volatile unsigned long _stepCount;         // 총 스텝 수
+    volatile unsigned long _intervalCounter;   // 고정 간격 카운터 (동적 모드에서 보조)
     
     // 타이머 관련
     void setupTimer();
     void startTimer();
     void stopTimer();
+    void setDynamicAlarm(unsigned long intervalTicks);  // 동적 알람 설정 (ISR에서 호출)
     void switchToPositionMode();  // 위치 모드로 전환
     void switchToSpeedMode();     // 속도 모드로 전환
     
@@ -138,6 +165,13 @@ private:
         void doPositionStep();    // 위치 기반 제어 모드용 스텝 실행
     #endif
     
+    // 수정: 동적 타이머 업데이트 헬퍼 (ISR 안전 재설정)
+    #if defined(ESP32)
+        void IRAM_ATTR updateNextInterval(unsigned long nextInterval);
+    #else
+        void updateNextInterval(unsigned long nextInterval);
+    #endif
+    
     // 정적 함수 (ISR에서 호출)
     static TimerStepper* _instance;
     #if defined(ESP32)
@@ -158,10 +192,9 @@ private:
     volatile long _target1;              // 가속 구간 끝점 (정속 구간 시작)
     volatile long _target2;              // 감속 구간 시작점 (정속 구간 끝)
     volatile long _decelSteps;           // 감속 구간 스텝 수
-    volatile unsigned long _constantSpeedIntervalCount;  // 정속 구간에서 건너뛸 인터럽트 수
-    volatile unsigned long _intervalCounter;    // 현재 인터벌 카운트
-    volatile unsigned long _lastPulseInterval;  // 마지막 펄스 인터벌 (스케일 안됨)
-    volatile unsigned long _initialInterval;    // 가속 시작/감속 종료 간격 (스케일 안됨)
+    volatile unsigned long _constantSpeedIntervalCount;  // 정속 구간 인터벌 (μs 단위, 동적)
+    volatile unsigned long _lastPulseInterval;  // 마지막 펄스 인터벌 (μs 단위)
+    volatile unsigned long _initialInterval;    // 가속 시작/감속 종료 간격 (μs 단위)
     volatile unsigned long _stepCounter;       // 현재 스텝 카운터 (가속/감속 계산용)
     
     // 플랫폼별 타이머 변수
