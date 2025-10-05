@@ -47,6 +47,8 @@ class TimerStepper {
 public:
     // 생성자: 스텝핀과 방향핀 설정
     TimerStepper(uint8_t stepPin, uint8_t dirPin);
+    // 소멸자: 메모리 해제
+    ~TimerStepper();
     
     // ===== 타이머 기반 모터 제어 함수들 =====
     void setSpeed(float stepsPerSecond);  // 속도 설정 (스텝/초) - 타이머 기반
@@ -145,11 +147,11 @@ private:
     void switchToSpeedMode();     // 속도 모드로 전환
     
     // 가속/감속 계산 함수들
-    void calculateTrajectory();  // 궤적 계산 (moveTo에서 호출)
+    void calculateTrajectory();  // 궤적 계산 및 펄스 간격 배열 생성
     #if defined(ESP32)
-        void IRAM_ATTR calculateNextInterval();  // 다음 펄스 간격 계산 (인터럽트에서 호출)
+        void IRAM_ATTR getNextPulseInterval();  // 다음 펄스 간격 조회 (배열에서)
     #else
-        void calculateNextInterval();  // 다음 펄스 간격 계산 (인터럽트에서 호출)
+        void getNextPulseInterval();  // 다음 펄스 간격 조회 (배열에서)
     #endif
     #if defined(ESP32)
         void IRAM_ATTR generateStepPulse();  // 펄스 생성 (인터럽트용)
@@ -192,10 +194,12 @@ private:
     volatile long _target1;              // 가속 구간 끝점 (정속 구간 시작)
     volatile long _target2;              // 감속 구간 시작점 (정속 구간 끝)
     volatile long _decelSteps;           // 감속 구간 스텝 수
-    volatile unsigned long _constantSpeedIntervalCount;  // 정속 구간 인터벌 (μs 단위, 동적)
-    volatile unsigned long _lastPulseInterval;  // 마지막 펄스 인터벌 (μs 단위)
-    volatile unsigned long _initialInterval;    // 가속 시작/감속 종료 간격 (μs 단위)
-    volatile unsigned long _stepCounter;       // 현재 스텝 카운터 (가속/감속 계산용)
+    volatile unsigned long _constantSpeedIntervalCount;  // 정속 구간 인터벌 (μs 단위)
+    
+    // 미리 계산된 펄스 간격 배열 (최적화용)
+    volatile unsigned long* _pulseIntervals;  // 가속/감속 구간 펄스 간격 배열
+    volatile unsigned long _accelSteps;       // 가속 구간 스텝 수
+    volatile unsigned long _currentStepIndex; // 현재 스텝 인덱스
     
     // 플랫폼별 타이머 변수
     #if defined(ESP32)
