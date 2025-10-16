@@ -89,26 +89,7 @@ void loop() {
   Serial.println("-500 이동 완료!");
   delay(2000);
   
-  // 예제 5: runToNewPosition 사용
-  Serial.println("예제 5: runToNewPosition으로 1500 이동");
-  stepper.runToNewPosition(1500);
-  Serial.println("1500 위치 도달!");
-  delay(2000);
-  
-  // 예제 6: 가속도 변경
-  Serial.println("예제 6: 가속도를 200으로 변경하여 원점 복귀");
-  stepper.setAcceleration(200.0);
-  stepper.runToNewPosition(0);
-  Serial.println("원점 복귀 완료!");
-  delay(2000);
-  
-  // 예제 7: 최대 속도 변경 (위치 제어용)
-  Serial.println("예제 7: 위치 제어용 최대 속도를 500으로 변경하여 1000 이동");
-  stepper.setMaxSpeed(500.0);
-  stepper.setAcceleration(1000.0);
-  stepper.runToNewPosition(1000);
-  Serial.println("1000 위치 도달!");
-  delay(2000);
+
   
   // 상태 정보 출력
   Serial.println("=== 현재 상태 ===");
