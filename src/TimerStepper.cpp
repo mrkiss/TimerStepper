@@ -223,7 +223,7 @@ void TimerStepper::startTimer() {
             unsigned long ticks = _stepInterval;  // 1MHz이므로 us = ticks
             if (ticks > 0xFFFFFFFFUL) ticks = 0xFFFFFFFFUL;
             portENTER_CRITICAL_ISR(&_timerMux);
-            //timerWrite(_timer, ticks);
+            //timerWrite(_timer, ticks);    // Dynamic Timer Update 할때에 절대 쓰면 안되는 것!!
             timerAlarm(_timer, ticks, true, 0);  // 동적 알람, 자동 리로드
             timerStart(_timer);
             portEXIT_CRITICAL_ISR(&_timerMux);
@@ -390,7 +390,7 @@ void TimerStepper::updateNextInterval(unsigned long nextInterval) {
             unsigned long ticks = nextInterval;
             if (ticks > 0xFFFFFFFFUL) ticks = 0xFFFFFFFFUL;
             portENTER_CRITICAL_ISR(&_timerMux);
-            //timerWrite(_timer, ticks);
+            //timerWrite(_timer, ticks);    // Dynamic Timer Update 할때에 절대 쓰면 안되는 것!!
             timerAlarm(_timer, ticks, true, 0);
             portEXIT_CRITICAL_ISR(&_timerMux);
         #elif defined(__AVR__)
@@ -494,7 +494,7 @@ void TimerStepper::moveTo(long absolute) {
         calculateTrajectory();
         
         // 디버그: calculateTrajectory() 후 상태 확인
-        Serial.printf("DEBUG moveTo: calculateTrajectory() 완료 후 _accelSteps=%lu\n", _accelSteps);
+        // Serial.printf("DEBUG moveTo: calculateTrajectory() 완료 후 _accelSteps=%lu\n", _accelSteps);
         
         // 위치 제어 모드에서는 첫 번째 펄스 간격으로 설정
         if (_pulseIntervals != nullptr && _accelSteps > 0) {
@@ -509,7 +509,7 @@ void TimerStepper::moveTo(long absolute) {
         _positionModeActive = true;
         _isRunning = true;
         
-        Serial.printf("DEBUG moveTo: 타이머 시작 완료, _stepInterval=%lu\n", _stepInterval);
+        // Serial.printf("DEBUG moveTo: 타이머 시작 완료, _stepInterval=%lu\n", _stepInterval);
     }
 }
 
@@ -537,7 +537,7 @@ void TimerStepper::calculateTrajectory() {
     float decelDistance = accelDistance;
     
     // 디버그: 계산 과정 확인
-    Serial.printf("DEBUG calculateTrajectory: distance=%ld, accelDistance=%.2f, _acceleration=%.2f, _maxSpeed=%.2f\n",
+    //Serial.printf("DEBUG calculateTrajectory: distance=%ld, accelDistance=%.2f, _acceleration=%.2f, _maxSpeed=%.2f\n",
                   absDistance, accelDistance, _acceleration, _maxSpeed);
     
     if (absDistance >= (accelDistance + decelDistance)) {
@@ -569,7 +569,7 @@ void TimerStepper::calculateTrajectory() {
         // 가속 구간 펄스 간격 배열 생성
         _pulseIntervals = (volatile unsigned long*)malloc(_accelSteps * sizeof(unsigned long));
         if (_pulseIntervals == nullptr) {
-            Serial.println("ERROR: 펄스 간격 배열 메모리 할당 실패");
+            //Serial.println("ERROR: 펄스 간격 배열 메모리 할당 실패");
             return;
         }
         
@@ -591,11 +591,11 @@ void TimerStepper::calculateTrajectory() {
         // 초기 간격 설정
         _currentStepIndex = 0;
         
-        Serial.printf("DEBUG: 펄스 간격 배열 생성 완료, _accelSteps=%lu\n", _accelSteps);
+        //Serial.printf("DEBUG: 펄스 간격 배열 생성 완료, _accelSteps=%lu\n", _accelSteps);
     } else {
         _pulseIntervals = nullptr;
         _currentStepIndex = 0;
-        Serial.println("DEBUG: 가속 구간 없음, 정속 모드");
+        //Serial.println("DEBUG: 가속 구간 없음, 정속 모드");
     }
     
 }
@@ -662,4 +662,55 @@ void TimerStepper::debugDetailed() {
 void TimerStepper::resetISRDebugCount() {
     isrDebug.isrCallCount = 0;
     Serial.println("ISR 디버그 카운터 리셋됨");
+}
+
+// 거리 계산 함수들 구현
+long TimerStepper::calculateDistanceForTime(float timeSeconds) {
+    return calculateDistanceForTime(timeSeconds, _maxSpeed, _acceleration);
+}
+
+long TimerStepper::calculateDistanceForTime(float timeSeconds, float maxSpeed, float acceleration) {
+    if (timeSeconds <= 0 || maxSpeed <= 0 || acceleration <= 0) {
+        return 0;
+    }
+    
+    // 가속 구간에서 최대 속도에 도달하는 시간 계산
+    float timeToMaxSpeed = maxSpeed / acceleration;
+    
+    // 감속 구간 시간 (가속과 동일)
+    float timeToDecel = timeToMaxSpeed;
+    
+    // 총 가속/감속 시간
+    float totalAccelDecelTime = timeToMaxSpeed + timeToDecel;
+    
+    if (timeSeconds <= totalAccelDecelTime) {
+        // 삼각형 프로파일: 가속/감속만으로 시간이 끝남
+        // 가속 구간에서의 거리 = 0.5 * acceleration * t^2
+        // 감속 구간에서의 거리 = maxSpeed * t - 0.5 * acceleration * t^2
+        
+        if (timeSeconds <= timeToMaxSpeed) {
+            // 아직 가속 중
+            return (long)(0.5 * acceleration * timeSeconds * timeSeconds);
+        } else {
+            // 가속 완료 후 감속 중
+            float accelDistance = 0.5 * acceleration * timeToMaxSpeed * timeToMaxSpeed;
+            float remainingTime = timeSeconds - timeToMaxSpeed;
+            float decelDistance = maxSpeed * remainingTime - 0.5 * acceleration * remainingTime * remainingTime;
+            return (long)(accelDistance + decelDistance);
+        }
+    } else {
+        // 사다리꼴 프로파일: 가속 + 정속 + 감속
+        float constantSpeedTime = timeSeconds - totalAccelDecelTime;
+        
+        // 가속 구간 거리
+        float accelDistance = 0.5 * acceleration * timeToMaxSpeed * timeToMaxSpeed;
+        
+        // 정속 구간 거리
+        float constantDistance = maxSpeed * constantSpeedTime;
+        
+        // 감속 구간 거리 (가속과 동일)
+        float decelDistance = accelDistance;
+        
+        return (long)(accelDistance + constantDistance + decelDistance);
+    }
 }

@@ -32,8 +32,7 @@ setCurrentPosition	KEYWORD2
 moveTo	KEYWORD2
 move	KEYWORD2
 run	KEYWORD2
-runToPosition	KEYWORD2
-runToNewPosition	KEYWORD2
+
 
 # 위치 및 상태 확인 함수
 currentPosition	KEYWORD2

@@ -63,8 +63,6 @@ public:
     void setCurrentPosition(long position);    // 현재 위치 설정
     void moveTo(long absolute);                // 절대 위치로 이동 (타이머 기반)
     void move(long relative);                  // 상대 위치로 이동 (타이머 기반)
-    bool run();                                // 모터 상태 확인 (타이머 기반에서는 단순 상태 확인)
-    void runToPosition();                      // 목표 위치까지 대기 (블로킹)
     // 타이머 기반 모드에서는 moveTo() 호출 즉시 인터럽트에서 모든 계산 처리
     
     // 상태 확인 함수들
@@ -87,6 +85,10 @@ public:
     // 타이머 설정 함수들
     void setMinPulseWidth(unsigned int microseconds);  // 최소 펄스 폭 설정
     void setMaxSpeed(float maxStepsPerSecond);         // 위치 제어용 최대 속도 제한
+    
+    // 거리 계산 함수들
+    long calculateDistanceForTime(float timeSeconds);  // 주어진 시간(초)으로 이동 가능한 거리 계산
+    long calculateDistanceForTime(float timeSeconds, float maxSpeed, float acceleration);  // 매개변수로 속도/가속도 지정
     
     // 디버그 함수들
     void debugISRStatus();           // ISR 상태 출력
