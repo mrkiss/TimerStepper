@@ -14,7 +14,6 @@ TimerStepper는 하드웨어 타이머를 사용하여 정확한 펄스 타이�
 - **2핀 제어**: 스텝핀과 방향핀만으로 모터 제어
 - **스텝 카운팅**: 정확한 스텝 수 추적
 - **안정성**: 최소 펄스 폭 보장 및 속도 제한
-- **AccelStepper 호환**: 가속/감속 및 위치 제어 기능 지원
 - **선형 가속도**: 부드러운 가속/감속 곡선
 - **위치 제어**: 절대/상대 위치 이동 및 목표 도달 감지
 - **타이머 기반 위치 제어**: 위치 제어도 타이머를 사용하여 정확하고 효율적
@@ -22,9 +21,9 @@ TimerStepper는 하드웨어 타이머를 사용하여 정확한 펄스 타이�
 
 ## 하드웨어 요구사항
 
-- **AVR 기반**: Arduino Uno, Nano, Mega 등
+- **AVR 기반**: Not Tested for Arduino Uno, Nano, Mega 등  
 - **ESP32 기반**: ESP32, ESP32-S2, ESP32-S3, ESP32-C3 등
-- 스테퍼 모터 드라이버 (A4988, DRV8825 등)
+- 스테퍼 모터 드라이버 (A4988, DRV8825 등) 전용 step, direction 
 - 스테퍼 모터
 
 ## 설치
@@ -71,8 +70,7 @@ const int DIR_PIN = 3;
 TimerStepper stepper(STEP_PIN, DIR_PIN);
 
 void setup() {
-  stepper.setMaxSpeed(1000.0);  // 최대 속도 설정
-  stepper.setMinPulseWidth(2);  // 최소 펄스 폭 설정
+
 }
 
 void loop() {
@@ -109,28 +107,27 @@ void loop() {
   // while (stepper.distanceToGo() != 0) {  // 제어권을 유지하고 싶을 때 사용
   //   // 다른 작업 수행 가능
   // }
-  
-  // 방법 2: moveTo with parameters (가속도/최대속도 직접 지정)
-  stepper.moveTo(0, 800.0, 300.0);  // 최대속도 800, 가속도 300
-  // while (stepper.distanceToGo() != 0) { 
-  // }
-  
-  // 방법 3: 상대 위치 이동
-  stepper.move(1000);  // 현재 위치에서 +1000 이동
-  
-  // 방법 3: 목표 위치까지 대기 (블로킹)
-  stepper.moveTo(0);
-  stepper.runToPosition();  // 목표 위치 도달까지 대기
-  
-  delay(1000);
+ while (stepper.distanceToGo() != 0) {
+    // 메인 루프에서 다른 작업 수행 가능 (타이머 기반)
+    if (millis() - lastStatusTime >= 1000) {  // 1초마다 상태 출력
+      Serial.print("복귀 중 - 현재 위치: ");
+      Serial.print(stepper.currentPosition());
+      Serial.print(", 남은 거리: ");
+      Serial.print(stepper.distanceToGo());
+      Serial.print(", 현재 속도: ");
+      Serial.println(stepper.speed());
+      lastStatusTime = millis();
+    }
+    
+
 }
 ```
 
 ### 두 모드의 차이점
 
-| 특징 | 타이머 기반 모드 | AccelStepper 호환 모드 |
+| 특징 | 정속 모드 | 위치 제어 모드 |
 |------|------------------|------------------------|
-| **제어 방식** | 실시간 속도 제어 | 위치 기반 제어 |
+| **제어 방식** | 정속도 제어 | 위치 기반 제어 |
 | **가속/감속** | 없음 (즉시 속도 변경) | 부드러운 가속/감속 곡선 |
 | **사용 함수** | `runSpeed()`, `stop()` | `moveTo()`, `move()` |
 | **타이밍** | 하드웨어 타이머 (정확) | 하드웨어 타이머 (정확) |
@@ -168,12 +165,6 @@ unsigned long getStepCount()            // 스텝 카운트 반환
 void resetStepCount()                   // 스텝 카운트 리셋
 ```
 
-### 설정 함수
-
-```cpp
-void setMinPulseWidth(unsigned int microseconds)  // 최소 펄스 폭 설정
-void setMaxSpeed(float maxStepsPerSecond)         // 최대 속도 제한
-```
 
 ### 거리 계산 함수
 
@@ -201,6 +192,7 @@ long distance = stepper.calculateDistanceForTime(2.0, 1500.0, 800.0);
 ### 가속/감속 제어 함수 (AccelStepper 호환)
 
 ```cpp
+void setMaxSpeed(float maxStepsPerSecond)         // 최대 속도 제한
 void setAcceleration(float acceleration)          // 가속도 설정 (스텝/초²)
 void setCurrentPosition(long position)            // 현재 위치 설정
 void moveTo(long absolute)                        // 절대 위치로 이동
