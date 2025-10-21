@@ -340,20 +340,19 @@ MIT License
   - 주어진 시간 동안 이동 가능한 거리 계산
   - 삼각형/사다리꼴 프로파일 지원
   - 물리학적 공식 기반 정확한 계산
-  - DistanceCalculationExample 예제 추가
+  - DistanceForTime 예제 추가
 
-- **v1.1.0**: AccelStepper 호환 기능 및 ESP32 지원 추가 (동적 타이머 적용)
+- **v1.1.0**: 동적 타이머 적용
   - 동적 타이머 알람 기반 제어 (펄스별 간격 동적 조정)
   - ISR 내부 논블로킹 펄스 생성
   - 펄스 간격 배열 방식의 가속/감속 처리
   - 가속/감속 제어 (선형 가속도)
   - 위치 제어 (절대/상대 위치 이동)
   - 목표 위치 도달 감지
-  - AccelStepper API 호환성
   - ESP32 하드웨어 타이머 지원
   - 플랫폼별 최적화된 타이머 구현
   - 디버그 정보 및 상태 모니터링 기능 추가
-  - 새로운 예제 추가 (AccelExample, ESP32Example, TimerPositionExample)
+  - 새로운 예제 추가 (TimerPositionExample)
 
 - **v1.0.0**: 초기 릴리스
   - 기본 타이머 기반 스테퍼 제어

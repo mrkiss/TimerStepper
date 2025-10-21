@@ -10,7 +10,7 @@
   - 방향 전환 버튼: 디지털 핀 4
   - 시작/정지 버튼: 디지털 핀 5
   
-  작성자: AI Assistant
+  작성자: mrkiss89@gmail.com
   라이브러리: TimerStepper
 */
 

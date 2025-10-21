@@ -7,7 +7,7 @@
   - 스텝핀: 디지털 핀 2
   - 방향핀: 디지털 핀 3
   
-  작성자: AI Assistant
+  작성자: mrkiss89@gmail.com
   라이브러리: TimerStepper
 */
 
