@@ -538,7 +538,7 @@ void TimerStepper::calculateTrajectory() {
     
     // 디버그: 계산 과정 확인
     //Serial.printf("DEBUG calculateTrajectory: distance=%ld, accelDistance=%.2f, _acceleration=%.2f, _maxSpeed=%.2f\n",
-                  absDistance, accelDistance, _acceleration, _maxSpeed);
+    //              absDistance, accelDistance, _acceleration, _maxSpeed);
     
     if (absDistance >= (accelDistance + decelDistance)) {
         // 사다리꼴
